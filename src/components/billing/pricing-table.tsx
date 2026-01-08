@@ -62,7 +62,7 @@ export function PricingTable({
           className={cn(annual && 'text-primary font-medium', 'flex items-center gap-2')}
         >
           Annual
-          <Badge variant="success" className="text-xs">
+          <Badge className="text-xs bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200">
             Save 17%
           </Badge>
         </Label>

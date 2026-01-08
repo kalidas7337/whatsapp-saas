@@ -29,13 +29,13 @@ export function SubscriptionCard({
   const getStatusBadge = () => {
     switch (subscription.status) {
       case 'active':
-        return <Badge variant="success">Active</Badge>
+        return <Badge className="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200">Active</Badge>
       case 'authenticated':
-        return <Badge variant="warning">Awaiting Payment</Badge>
+        return <Badge className="bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200">Awaiting Payment</Badge>
       case 'created':
         return <Badge variant="secondary">Created</Badge>
       case 'pending':
-        return <Badge variant="warning">Pending</Badge>
+        return <Badge className="bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200">Pending</Badge>
       case 'halted':
         return <Badge variant="destructive">Halted</Badge>
       case 'cancelled':
@@ -45,7 +45,7 @@ export function SubscriptionCard({
       case 'expired':
         return <Badge variant="destructive">Expired</Badge>
       case 'paused':
-        return <Badge variant="warning">Paused</Badge>
+        return <Badge className="bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200">Paused</Badge>
       default:
         return <Badge variant="outline">{subscription.status}</Badge>
     }

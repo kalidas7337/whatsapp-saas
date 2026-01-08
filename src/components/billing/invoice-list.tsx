@@ -49,11 +49,11 @@ export function InvoiceList({ invoices }: InvoiceListProps) {
   const getStatusBadge = (status: Invoice['status']) => {
     switch (status) {
       case 'paid':
-        return <Badge variant="success">Paid</Badge>
+        return <Badge className="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200">Paid</Badge>
       case 'issued':
-        return <Badge variant="warning">Issued</Badge>
+        return <Badge className="bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200">Issued</Badge>
       case 'partially_paid':
-        return <Badge variant="warning">Partial</Badge>
+        return <Badge className="bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200">Partial</Badge>
       case 'draft':
         return <Badge variant="secondary">Draft</Badge>
       case 'cancelled':
