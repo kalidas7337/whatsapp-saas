@@ -39,7 +39,6 @@ import {
   IconQrcode,
   IconUpload,
   IconFileSearch,
-  IconBrandTally,
   IconRocket,
   IconTargetArrow,
   IconHeartHandshake,
@@ -394,7 +393,7 @@ export function LandingPage() {
               highlight: 'Know who did what',
             },
             {
-              icon: IconBrandTally,
+              icon: IconCalculator,
               title: 'Tally Integration',
               description: 'Auto-sync client list from Tally. Send invoices via WhatsApp. Payment reminders on autopilot.',
               highlight: 'No manual data entry',
