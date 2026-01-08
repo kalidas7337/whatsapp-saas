@@ -1,0 +1,7 @@
+export { OnboardingWizard } from './onboarding-wizard'
+export { ProgressIndicator } from './progress-indicator'
+export { WelcomeStep } from './steps/welcome-step'
+export { BusinessInfoStep } from './steps/business-info-step'
+export { WhatsAppSetupStep } from './steps/whatsapp-setup-step'
+export { InviteTeamStep } from './steps/invite-team-step'
+export { CompleteStep } from './steps/complete-step'

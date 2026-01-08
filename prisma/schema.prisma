@@ -1,0 +1,2690 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model audit_logs {
+  id          String   @id
+  user_id     String?
+  task_id     String?
+  action      String
+  entity_type String
+  entity_id   String
+  old_values  Json?
+  new_values  Json?
+  ip_address  String?
+  user_agent  String?
+  createdAt   DateTime @default(now())
+  tasks       tasks?   @relation(fields: [task_id], references: [id])
+  users       users?   @relation(fields: [user_id], references: [id])
+
+  @@index([createdAt])
+  @@index([entity_type])
+  @@index([user_id])
+}
+
+model password_reset_tokens {
+  id         String    @id
+  user_id    String
+  token      String    @unique
+  expires_at DateTime
+  is_used    Boolean   @default(false)
+  used_at    DateTime?
+  created_at DateTime  @default(now())
+  users      users     @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@index([token])
+  @@index([user_id])
+  @@index([expires_at])
+}
+
+model email_verification_tokens {
+  id         String    @id
+  user_id    String
+  token      String    @unique
+  expires_at DateTime
+  is_used    Boolean   @default(false)
+  used_at    DateTime?
+  created_at DateTime  @default(now())
+  users      users     @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@index([token])
+  @@index([user_id])
+  @@index([expires_at])
+}
+
+model magic_link_tokens {
+  id         String    @id
+  user_id    String
+  token      String    @unique
+  expires_at DateTime
+  is_used    Boolean   @default(false)
+  used_at    DateTime?
+  created_at DateTime  @default(now())
+  users      users     @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@index([token])
+  @@index([user_id])
+  @@index([expires_at])
+}
+
+model email_provider_settings {
+  id                   String   @id @default(cuid())
+  provider             String   @default("brevo") // 'brevo' or 'ses'
+  is_enabled           Boolean  @default(true)
+  brevo_api_key        String?
+  brevo_sender_email   String?
+  brevo_sender_name    String?
+  ses_region           String?
+  ses_access_key       String?
+  ses_secret_key       String?
+  ses_from_email       String?
+  ses_from_name        String?
+  global_daily_limit   Int      @default(300)
+  global_monthly_limit Int      @default(9000)
+  addon_pack_size      Int      @default(500)
+  addon_pack_price     Decimal  @default(500)
+  created_at           DateTime @default(now())
+  updated_at           DateTime @updatedAt
+  updated_by           String?
+
+  @@index([provider])
+}
+
+model ca_firm_email_quotas {
+  id                String    @id @default(cuid())
+  ca_firm_id        String    @unique
+  plan_type         String    @default("BASIC") // BASIC, PROFESSIONAL, ENTERPRISE
+  monthly_limit     Int       @default(200) // BASIC: 200, PRO: 500, ENT: 1500
+  current_usage     Int       @default(0)
+  overage_allowed   Boolean   @default(true)
+  overage_count     Int       @default(0)
+  custom_limit      Int? // Platform admin override
+  is_enabled        Boolean   @default(true)
+  reset_date        DateTime
+  last_reset_at     DateTime?
+  custom_domain     String? // For Enterprise plan
+  custom_from_email String? // For Enterprise plan
+  firm_logo_url     String? // For email branding
+  created_at        DateTime  @default(now())
+  updated_at        DateTime  @updatedAt
+  ca_firms          ca_firms  @relation(fields: [ca_firm_id], references: [id], onDelete: Cascade)
+
+  @@index([ca_firm_id])
+  @@index([plan_type])
+}
+
+model email_logs {
+  id                    String                  @id @default(cuid())
+  ca_firm_id            String?
+  user_id               String?
+  email_type            String // 'AUTH', 'CLIENT', 'NOTIFICATION', 'INVOICE', etc.
+  priority              String                  @default("MEDIUM") // CRITICAL, HIGH, MEDIUM, LOW
+  to_email              String
+  from_email            String
+  subject               String
+  template_name         String?
+  status                String                  @default("PENDING") // PENDING, SENT, DELIVERED, FAILED, BOUNCED
+  provider_used         String // 'brevo' or 'ses'
+  provider_message_id   String?
+  error_message         String?
+  sent_at               DateTime?
+  delivered_at          DateTime?
+  opened_at             DateTime?
+  clicked_at            DateTime?
+  bounced_at            DateTime?
+  created_at            DateTime                @default(now())
+  ca_firms              ca_firms?               @relation(fields: [ca_firm_id], references: [id])
+  users                 users?                  @relation(fields: [user_id], references: [id])
+  email_delivery_events email_delivery_events[]
+
+  @@index([ca_firm_id])
+  @@index([email_type])
+  @@index([priority])
+  @@index([status])
+  @@index([created_at])
+}
+
+model email_delivery_events {
+  id           String     @id @default(cuid())
+  email_log_id String
+  event_type   String // 'delivered', 'bounced', 'opened', 'clicked', 'complained'
+  event_data   Json?
+  received_at  DateTime   @default(now())
+  email_logs   email_logs @relation(fields: [email_log_id], references: [id], onDelete: Cascade)
+
+  @@index([email_log_id])
+  @@index([event_type])
+}
+
+model email_templates {
+  id         String    @id @default(cuid())
+  ca_firm_id String? // NULL for system templates, specific ID for CA firm custom templates
+  ca_firms   ca_firms? @relation(fields: [ca_firm_id], references: [id], onDelete: Cascade)
+
+  name         String
+  type         String // 'email', 'sms', 'whatsapp', 'telegram'
+  category     String // 'auth', 'notification', 'billing', 'task', 'compliance', 'document'
+  subject      String? @db.Text // For email only
+  html_content String  @db.Text
+  text_content String? @db.Text
+  variables    Json // Array of variable names like ['userName', 'firmName', 'amount']
+
+  is_active  Boolean  @default(true)
+  is_system  Boolean  @default(false) // System templates vs custom CA firm templates
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+  created_by String? // User ID who created the template
+
+  @@index([ca_firm_id])
+  @@index([type])
+  @@index([category])
+  @@index([is_system])
+}
+
+model email_addon_packs {
+  id           String    @id @default(cuid())
+  ca_firm_id   String
+  pack_size    Int // Number of additional emails
+  pack_price   Decimal
+  purchased_at DateTime  @default(now())
+  expires_at   DateTime?
+  emails_used  Int       @default(0)
+  is_active    Boolean   @default(true)
+  purchased_by String?
+  ca_firms     ca_firms  @relation(fields: [ca_firm_id], references: [id], onDelete: Cascade)
+
+  @@index([ca_firm_id])
+  @@index([is_active])
+}
+
+model billing_info {
+  id             String        @id
+  client_id      String
+  task_id        String?
+  billingType    BillingType
+  base_amount    Decimal
+  tax_amount     Decimal?
+  total_amount   Decimal
+  paid_amount    Decimal       @default(0)
+  balance_amount Decimal
+  billing_date   DateTime
+  due_date       DateTime
+  paid_date      DateTime?
+  status         BillingStatus @default(PENDING)
+  invoice_number String?
+  invoice_path   String?
+  paymentMode    PaymentMode?
+  payment_ref    String?
+  payment_notes  String?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime
+  clients        clients       @relation(fields: [client_id], references: [id])
+  tasks          tasks?        @relation(fields: [task_id], references: [id])
+
+  @@index([client_id])
+  @@index([status])
+}
+
+model ca_firm_features {
+  id               String    @id
+  ca_firm_id       String
+  feature_id       String
+  is_enabled       Boolean   @default(false)
+  usage_limit      Int?      @default(0)
+  current_usage    Int       @default(0)
+  pricing_override Decimal?
+  enabled_at       DateTime?
+  enabled_by       String?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+  ca_firms         ca_firms  @relation(fields: [ca_firm_id], references: [id], onDelete: Cascade)
+
+  @@unique([ca_firm_id, feature_id])
+  @@index([feature_id])
+}
+
+model ca_firm_users {
+  id                 String           @id
+  ca_firm_id         String
+  user_id            String
+  role               UserRole         @default(STAFF)
+  can_create_clients Boolean          @default(false)
+  joined_at          DateTime         @default(now())
+  isActive           Boolean          @default(true)
+  createdAt          DateTime         @default(now())
+  updatedAt          DateTime         @updatedAt
+  ca_firms           ca_firms         @relation(fields: [ca_firm_id], references: [id], onDelete: Cascade)
+  users              users            @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  absence_records    staff_absences[] @relation("staff_member")
+  marked_absences    staff_absences[] @relation("marked_by_user")
+
+  @@unique([ca_firm_id, user_id])
+  @@index([user_id])
+  @@index([role])
+}
+
+model feature_requests {
+  id           String                     @id
+  ca_firm_id   String
+  feature_id   String
+  requested_by String
+  status       FeatureRequestStatus       @default(PENDING)
+  priority     String                     @default("MEDIUM")
+  notes        String?
+  admin_notes  String?
+  reviewed_by  String?
+  reviewed_at  DateTime?
+  createdAt    DateTime                   @default(now())
+  updatedAt    DateTime                   @updatedAt
+  ca_firms     ca_firms                   @relation(fields: [ca_firm_id], references: [id], onDelete: Cascade)
+  messages     feature_request_messages[]
+
+  @@index([ca_firm_id])
+  @@index([feature_id])
+  @@index([status])
+  @@index([createdAt])
+}
+
+model feature_request_messages {
+  id               String           @id
+  request_id       String
+  sender_id        String
+  sender_type      String // 'CA_FIRM' or 'PLATFORM_ADMIN'
+  message          String
+  createdAt        DateTime         @default(now())
+  feature_requests feature_requests @relation(fields: [request_id], references: [id], onDelete: Cascade)
+
+  @@index([request_id])
+  @@index([sender_id])
+  @@index([createdAt])
+}
+
+model support_tickets {
+  id               String              @id
+  ca_firm_id       String
+  subject          String
+  description      String
+  status           SupportTicketStatus @default(OPEN)
+  priority         String              @default("MEDIUM")
+  category         String?
+  created_by       String
+  assigned_to      String?
+  resolved_at      DateTime?
+  resolved_by      String?
+  resolution_notes String?
+  last_message_at  DateTime            @default(now())
+  createdAt        DateTime            @default(now())
+  updatedAt        DateTime            @updatedAt
+  ca_firms         ca_firms            @relation(fields: [ca_firm_id], references: [id], onDelete: Cascade)
+  messages         support_messages[]
+
+  @@index([ca_firm_id])
+  @@index([status])
+  @@index([created_by])
+  @@index([assigned_to])
+  @@index([createdAt])
+}
+
+model support_messages {
+  id               String          @id
+  ticket_id        String
+  sender_id        String
+  sender_type      String // 'CA_FIRM' or 'PLATFORM_ADMIN'
+  message          String
+  attachments      Json?
+  is_internal_note Boolean         @default(false)
+  createdAt        DateTime        @default(now())
+  support_tickets  support_tickets @relation(fields: [ticket_id], references: [id], onDelete: Cascade)
+
+  @@index([ticket_id])
+  @@index([sender_id])
+  @@index([createdAt])
+}
+
+model ca_firms {
+  id                  String          @id
+  firm_name           String
+  owner_name          String
+  owner_email         String          @unique
+  subscription_plan   String          @default("STARTER")
+  subscription_status String          @default("TRIAL")
+  onboarded_at        DateTime        @default(now())
+  trial_ends_at       DateTime?
+  firm_address        String?
+  firm_phone          String?
+  firm_website        String?
+  firm_gstin          String?
+  firm_pan            String?
+  billing_email       String?
+  billing_address     String?
+  subdomain           String?         @unique
+  custom_domain       String?
+  monthly_revenue     Decimal?        @default(0)
+  client_count        Int             @default(0)
+  staff_count         Int             @default(0)
+  health_score        Int             @default(100)
+  risk_level          String          @default("LOW")
+  last_active_at      DateTime?
+  isActive            Boolean         @default(true)
+  createdAt           DateTime        @default(now())
+  updatedAt           DateTime
+  firebase_config     Json?
+  // Storage Management
+  storage_provider    StorageProvider @default(PLATFORM_MANAGED)
+  storage_tier        StorageTier     @default(BASIC)
+  storage_quota_gb    Int             @default(2)
+  storage_used_bytes  BigInt          @default(0)
+
+  // Self-managed R2 credentials (should be encrypted)
+  r2_account_id    String?
+  r2_access_key_id String?
+  r2_secret_key    String?
+  r2_bucket_name   String?
+  r2_public_url    String?
+
+  // Storage tier metadata
+  storage_tier_price  Decimal?  @default(0)
+  storage_upgraded_at DateTime?
+  storage_expires_at  DateTime?
+  storage_auto_renew  Boolean   @default(true)
+
+  // Onboarding
+  onboarding_completed Boolean   @default(false)
+  onboarding_data      Json?
+
+  ca_firm_features       ca_firm_features[]
+  ca_firm_users          ca_firm_users[]
+  telegram_bots          telegram_bots[]
+  staff_absences         staff_absences[]
+  feature_requests       feature_requests[]
+  support_tickets        support_tickets[]
+  custom_templates       ca_firm_custom_templates[]
+  client_compliance_subs client_compliance_subscriptions[]
+  time_tracking          task_time_tracking[]
+  task_reviews           task_reviews[]
+  compliance_notices     compliance_notices[]
+  client_doc_reqs        client_document_requirements[]
+  document_requests      document_requests[]
+  comm_templates         document_communication_templates[]
+  email_quota              ca_firm_email_quotas?
+  email_logs               email_logs[]
+  email_addon_packs        email_addon_packs[]
+  email_templates          email_templates[]
+  whatsapp_doc_queue       whatsapp_document_queue[]
+  whatsapp_accounts        whatsapp_accounts[]
+  notification_subs        notification_subscriptions[]
+  // ✅ STANDARDIZED: Direct tenant ownership relations
+  clients                  clients[]
+  documents                documents[]
+  subscriptions            subscriptions?
+
+  @@index([owner_email])
+  @@index([subdomain])
+  @@index([subscription_plan])
+  @@index([subscription_status])
+  @@index([storage_provider])
+  @@index([storage_tier])
+}
+
+model subscriptions {
+  id                        String    @id @default(cuid())
+  organization_id           String    @unique
+  razorpay_customer_id      String?   @unique
+  razorpay_subscription_id  String?   @unique
+  plan                      String    @default("free") // free, starter, professional, enterprise
+  status                    String    @default("active") // created, authenticated, active, pending, halted, cancelled, completed, expired, paused
+  current_period_start      DateTime  @default(now())
+  current_period_end        DateTime
+  cancel_at_period_end      Boolean   @default(false)
+  trial_end                 DateTime?
+  pending_plan              String?   // Plan waiting for payment verification
+  created_at                DateTime  @default(now())
+  updated_at                DateTime  @updatedAt
+
+  ca_firms                  ca_firms  @relation(fields: [organization_id], references: [id], onDelete: Cascade)
+
+  @@index([razorpay_customer_id])
+  @@index([razorpay_subscription_id])
+  @@index([plan])
+  @@index([status])
+}
+
+model staff_absences {
+  id                   String        @id
+  staff_user_id        String
+  ca_firm_id           String
+  absence_type         AbsenceType
+  start_date           DateTime
+  end_date             DateTime
+  reason               String?
+  marked_by_user_id    String
+  notification_sent    Boolean       @default(false)
+  affected_tasks_count Int           @default(0)
+  createdAt            DateTime      @default(now())
+  updatedAt            DateTime      @updatedAt
+  staff_member         ca_firm_users @relation("staff_member", fields: [staff_user_id], references: [id], onDelete: Cascade)
+  marked_by            ca_firm_users @relation("marked_by_user", fields: [marked_by_user_id], references: [id])
+  ca_firms             ca_firms      @relation(fields: [ca_firm_id], references: [id], onDelete: Cascade)
+
+  @@index([staff_user_id])
+  @@index([ca_firm_id])
+  @@index([start_date, end_date])
+}
+
+model client_persons {
+  id                  String    @id
+  client_id           String
+  name                String
+  designation         String?
+  email               String?
+  phone               String?
+  pan                 String?
+  aadhar              String?
+  address             String?
+  share_percentage    Decimal?
+  share_amount        Decimal?
+  din                 String?
+  date_of_birth       DateTime?
+  date_of_appointment DateTime?
+  is_active           Boolean   @default(true)
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime
+  clients             clients   @relation(fields: [client_id], references: [id], onDelete: Cascade)
+}
+
+model clients {
+  id                            String       @id
+  name                          String
+  clientType                    ClientType
+  status                        ClientStatus @default(ACTIVE)
+  email                         String?
+  phone                         String?
+  alternate_phone               String?
+  website                       String?
+  registered_address            String?
+  communication_address         String?
+  pan                           String?
+  gstin                         String?
+  cin                           String?
+  partnership_reg_no            String?
+  trust_reg_no                  String?
+  business_nature               String?
+  annual_turnover               Decimal?
+  portal_username               String?      @unique
+  portal_password               String?
+  last_login_at                 DateTime?
+  referred_by_id                String?
+  referral_source               String?
+  service_package_id            String?
+  parent_id                     String?
+  notes                         String?
+  isActive                      Boolean      @default(true)
+  createdAt                     DateTime     @default(now())
+  updatedAt                     DateTime
+  created_by_id                 String
+  firm_id                       String?
+  // ✅ STANDARDIZED: Direct tenant reference for simple queries
+  ca_firm_id                    String?
+  customs_last_login_at         DateTime?
+  customs_portal_password       String?
+  customs_portal_user_id        String?
+  esi_last_login_at             DateTime?
+  esi_portal_password           String?
+  esi_portal_user_id            String?
+  gst_last_login_at             DateTime?
+  gst_portal_password           String?
+  gst_portal_username           String?
+  it_last_login_at              DateTime?
+  it_portal_password            String?
+  it_portal_user_id             String?
+  mca_last_login_at             DateTime?
+  mca_portal_password           String?
+  mca_portal_user_id            String?
+  pf_last_login_at              DateTime?
+  pf_portal_password            String?
+  pf_portal_user_id             String?
+  portal_credentials_encrypted  Boolean      @default(true)
+  portal_credentials_updated_at DateTime?
+  portal_credentials_updated_by String?
+  pt_last_login_at              DateTime?
+  pt_portal_password            String?
+  pt_portal_user_id             String?
+  tds_last_login_at             DateTime?
+  tds_portal_password           String?
+  tds_portal_user_id            String?
+
+  // ITR Profile & Income Information (for smart ITR form suggestion)
+  expected_annual_income         Decimal?
+  has_salary_income              Boolean   @default(false)
+  has_business_income            Boolean   @default(false)
+  has_professional_income        Boolean   @default(false)
+  has_capital_gains              Boolean   @default(false)
+  has_house_property_income      Boolean   @default(false)
+  has_foreign_income             Boolean   @default(false)
+  has_foreign_assets             Boolean   @default(false)
+  house_properties_count         Int?      @default(0)
+  is_company_director            Boolean   @default(false)
+  has_unlisted_shares            Boolean   @default(false)
+  has_intraday_trading           Boolean   @default(false)
+  has_lottery_income             Boolean   @default(false)
+  uses_presumptive_taxation      Boolean   @default(false)
+  requires_audit                 Boolean   @default(false)
+  suggested_itr_form             String?
+  itr_form_suggestion_updated_at DateTime?
+
+  billing_info                                  billing_info[]
+  client_persons                                client_persons[]
+  users                                         users                             @relation(fields: [created_by_id], references: [id])
+  firms                                         firms?                            @relation(fields: [firm_id], references: [id])
+  ca_firms                                      ca_firms?                         @relation(fields: [ca_firm_id], references: [id])
+  clients_clients_parent_idToclients            clients?                          @relation("clients_parent_idToclients", fields: [parent_id], references: [id])
+  other_clients_clients_parent_idToclients      clients[]                         @relation("clients_parent_idToclients")
+  clients_clients_referred_by_idToclients       clients?                          @relation("clients_referred_by_idToclients", fields: [referred_by_id], references: [id])
+  other_clients_clients_referred_by_idToclients clients[]                         @relation("clients_referred_by_idToclients")
+  service_packages                              service_packages?                 @relation(fields: [service_package_id], references: [id])
+  communication_logs                            communication_logs[]
+  compliance_calendar                           compliance_calendar[]
+  contacts                                      contacts[]
+  documents                                     documents[]
+  tally_companies                               tally_companies[]
+  tasks                                         tasks[]
+  telegram_chat_mappings                        telegram_chat_mappings[]
+  compliance_subscriptions                      client_compliance_subscriptions[]
+  notices                                       compliance_notices[]
+  document_requirements                         client_document_requirements[]
+  document_requests                             document_requests[]
+  portal_sessions                               client_portal_sessions[]
+
+  @@index([clientType])
+  @@index([gstin])
+  @@index([pan])
+  @@index([status])
+  @@index([ca_firm_id])
+}
+
+model communication_logs {
+  id                      String                   @id
+  client_id               String?
+  task_id                 String?
+  user_id                 String
+  type                    CommunicationType
+  channel                 CommunicationChannel
+  direction               CommunicationDirection
+  subject                 String?
+  content                 String
+  recipient               String
+  status                  CommunicationStatus      @default(PENDING)
+  sent_at                 DateTime?
+  delivered_at            DateTime?
+  read_at                 DateTime?
+  failure_reason          String?
+  template_id             String?
+  metadata                Json?
+  createdAt               DateTime                 @default(now())
+  updatedAt               DateTime
+  clients                 clients?                 @relation(fields: [client_id], references: [id])
+  tasks                   tasks?                   @relation(fields: [task_id], references: [id])
+  communication_templates communication_templates? @relation(fields: [template_id], references: [id])
+  users                   users                    @relation(fields: [user_id], references: [id])
+
+  @@index([client_id])
+  @@index([status])
+  @@index([type])
+}
+
+model communication_templates {
+  id                 String               @id
+  name               String
+  type               CommunicationType
+  channel            CommunicationChannel
+  subject            String?
+  content            String
+  is_active          Boolean              @default(true)
+  is_default         Boolean              @default(false)
+  createdAt          DateTime             @default(now())
+  updatedAt          DateTime
+  communication_logs communication_logs[]
+}
+
+model compliance_calendar {
+  id                  String           @id
+  client_id           String
+  task_id             String?
+  compliance_type     ComplianceType
+  period              String
+  government_due_date DateTime
+  internal_due_date   DateTime
+  client_due_date     DateTime?
+  status              ComplianceStatus @default(PENDING)
+  filed_date          DateTime?
+  acknowledgment_no   String?
+  is_overdue          Boolean          @default(false)
+  late_fee            Decimal?
+  interest            Decimal?
+  penalty_reason      String?
+  reminder_days       Int[]            @default([7, 3, 1])
+  last_reminder_sent  DateTime?
+  is_active           Boolean          @default(true)
+  custom_rules        Json?
+  createdAt           DateTime         @default(now())
+  updatedAt           DateTime
+  clients             clients          @relation(fields: [client_id], references: [id], onDelete: Cascade)
+  tasks               tasks?           @relation(fields: [task_id], references: [id])
+  notifications       notifications[]
+
+  @@index([client_id])
+  @@index([compliance_type])
+  @@index([government_due_date])
+  @@index([status])
+}
+
+model contacts {
+  id          String   @id
+  client_id   String
+  name        String
+  designation String?
+  email       String?
+  phone       String?
+  isPrimary   Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime
+  clients     clients  @relation(fields: [client_id], references: [id], onDelete: Cascade)
+}
+
+model documents {
+  id              String                     @id
+  client_id       String?
+  task_id         String?
+  uploaded_by_id  String
+  // ✅ STANDARDIZED: Direct tenant reference for simple queries
+  ca_firm_id      String?
+  name            String
+  original_name   String
+  description     String?
+  category        DocumentCategory
+  type            DocumentType
+  file_path       String
+  file_name       String
+  file_size       Int
+  mime_type       String
+  checksum        String?
+  storage_type    StorageType                @default(LOCAL)
+  cloud_path      String?
+  is_public       Boolean                    @default(false)
+  access_level    AccessLevel                @default(INTERNAL)
+  version         Int                        @default(1)
+  parent_id       String?
+  tags            String[]
+  metadata        Json?
+  is_active       Boolean                    @default(true)
+  createdAt       DateTime                   @default(now())
+  updatedAt       DateTime
+  clients         clients?                   @relation(fields: [client_id], references: [id])
+  ca_firms        ca_firms?                  @relation(fields: [ca_firm_id], references: [id])
+  documents       documents?                 @relation("documentsTodocuments", fields: [parent_id], references: [id])
+  other_documents documents[]                @relation("documentsTodocuments")
+  tasks           tasks?                     @relation(fields: [task_id], references: [id])
+  users           users                      @relation(fields: [uploaded_by_id], references: [id])
+  related_notices compliance_notices[]
+  request_uploads document_request_uploads[]
+
+  @@index([category])
+  @@index([client_id])
+  @@index([task_id])
+  @@index([type])
+  @@index([ca_firm_id])
+}
+
+model firms {
+  id               String    @id
+  name             String
+  domain           String?   @unique
+  email            String
+  phone            String
+  address          String?
+  gstin            String?
+  pan              String?
+  subscriptionType String    @default("basic")
+  featuresEnabled  Json?
+  isActive         Boolean   @default(true)
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime
+  clients          clients[]
+  users            users[]
+}
+
+model mobile_app_configs {
+  id           String   @id
+  config_key   String   @unique
+  config_value Json
+  category     String
+  description  String?
+  is_enabled   Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime
+}
+
+model mobile_devices {
+  id                       String               @id
+  user_id                  String
+  device_id                String               @unique
+  device_name              String?
+  device_type              String
+  app_version              String?
+  os_version               String?
+  fcm_token                String?
+  is_notifications_enabled Boolean              @default(true)
+  notification_preferences Json?
+  last_active_at           DateTime?
+  is_active                Boolean              @default(true)
+  createdAt                DateTime             @default(now())
+  updatedAt                DateTime
+  users                    users                @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  push_notifications       push_notifications[]
+
+  @@index([device_id])
+  @@index([user_id])
+}
+
+model notifications {
+  id                  String               @id
+  user_id             String
+  task_id             String?
+  compliance_id       String?
+  type                NotificationType
+  priority            NotificationPriority @default(MEDIUM)
+  title               String
+  message             String
+  action_url          String?
+  is_read             Boolean              @default(false)
+  read_at             DateTime?
+  createdAt           DateTime             @default(now())
+  expires_at          DateTime?
+  compliance_calendar compliance_calendar? @relation(fields: [compliance_id], references: [id])
+  tasks               tasks?               @relation(fields: [task_id], references: [id])
+  users               users                @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@index([type])
+  @@index([user_id, is_read])
+}
+
+model permissions {
+  id               String             @id
+  name             String             @unique
+  description      String
+  category         String
+  role_permissions role_permissions[]
+}
+
+model platform_admins {
+  id          String   @id
+  email       String   @unique
+  name        String
+  password    String
+  role        String   @default("PLATFORM_ADMIN")
+  permissions Json?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime
+
+  @@index([email])
+}
+
+model push_notifications {
+  id             String                 @id
+  device_id      String
+  title          String
+  body           String
+  data           Json?
+  type           PushNotificationType
+  priority       NotificationPriority   @default(MEDIUM)
+  sent_at        DateTime?
+  delivered_at   DateTime?
+  read_at        DateTime?
+  status         PushNotificationStatus @default(PENDING)
+  error_message  String?
+  task_id        String?
+  client_id      String?
+  createdAt      DateTime               @default(now())
+  updatedAt      DateTime
+  mobile_devices mobile_devices         @relation(fields: [device_id], references: [id], onDelete: Cascade)
+
+  @@index([createdAt])
+  @@index([device_id])
+  @@index([status])
+  @@index([type])
+}
+
+model role_permissions {
+  roleId       String
+  permissionId String
+  permissions  permissions @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+  roles        roles       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@id([roleId, permissionId])
+}
+
+model roles {
+  id               String             @id
+  name             String             @unique
+  description      String
+  isActive         Boolean            @default(true)
+  role_permissions role_permissions[]
+  user_roles       user_roles[]
+}
+
+model service_packages {
+  id             String      @id
+  name           String
+  description    String?
+  packageType    PackageType
+  base_price     Decimal
+  is_active      Boolean     @default(true)
+  is_default     Boolean     @default(false)
+  task_templates Json?
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime
+  clients        clients[]
+}
+
+model system_settings {
+  id          String   @id
+  key         String   @unique
+  value       String
+  category    String
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime
+}
+
+model tally_companies {
+  id               String            @id
+  client_id        String
+  company_name     String
+  tally_path       String
+  company_id       String?
+  server_url       String?
+  port             Int?              @default(9000)
+  is_active        Boolean           @default(true)
+  sync_method      TallySyncMethod   @default(XML_HTTP)
+  sync_frequency   String            @default("daily")
+  last_sync_at     DateTime?
+  next_sync_at     DateTime?
+  sync_ledgers     Boolean           @default(true)
+  sync_vouchers    Boolean           @default(true)
+  sync_groups      Boolean           @default(true)
+  sync_stock_items Boolean           @default(false)
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime
+  clients          clients           @relation(fields: [client_id], references: [id])
+  tally_groups     tally_groups[]
+  tally_ledgers    tally_ledgers[]
+  tally_sync_logs  tally_sync_logs[]
+  tally_vouchers   tally_vouchers[]
+
+  @@index([client_id])
+}
+
+model tally_groups {
+  id              String          @id
+  company_id      String
+  group_name      String
+  parent_group    String?
+  group_type      String?
+  opening_balance Decimal
+  closing_balance Decimal
+  tally_guid      String?
+  last_sync_at    DateTime        @default(now())
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime
+  tally_companies tally_companies @relation(fields: [company_id], references: [id], onDelete: Cascade)
+
+  @@index([company_id])
+}
+
+model tally_ledgers {
+  id              String          @id
+  company_id      String
+  ledger_name     String
+  alias_name      String?
+  group_name      String
+  opening_balance Decimal
+  closing_balance Decimal
+  ledger_type     String?
+  is_revenue      Boolean         @default(false)
+  gst_number      String?
+  pan_number      String?
+  tally_guid      String?
+  master_id       String?
+  alter_id        String?
+  last_sync_at    DateTime        @default(now())
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime
+  tally_companies tally_companies @relation(fields: [company_id], references: [id], onDelete: Cascade)
+
+  @@index([company_id])
+  @@index([ledger_name])
+}
+
+model tally_sync_logs {
+  id                String          @id
+  company_id        String
+  sync_method       TallySyncMethod
+  status            SyncStatus
+  records_processed Int
+  records_updated   Int
+  records_created   Int
+  records_failed    Int
+  started_at        DateTime
+  completed_at      DateTime?
+  duration          Int?
+  error_message     String?
+  error_details     Json?
+  createdAt         DateTime        @default(now())
+  tally_companies   tally_companies @relation(fields: [company_id], references: [id], onDelete: Cascade)
+
+  @@index([company_id])
+  @@index([status])
+}
+
+model tally_vouchers {
+  id              String          @id
+  company_id      String
+  voucher_number  String
+  voucher_type    String
+  date            DateTime
+  reference       String?
+  narration       String?
+  amount          Decimal
+  dr_amount       Decimal
+  cr_amount       Decimal
+  ledger_name     String
+  party_name      String?
+  tally_guid      String?
+  voucher_key     String?
+  last_sync_at    DateTime        @default(now())
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime
+  tally_companies tally_companies @relation(fields: [company_id], references: [id], onDelete: Cascade)
+
+  @@index([company_id])
+  @@index([date])
+  @@index([voucher_type])
+}
+
+model task_activities {
+  id            String   @id
+  task_id       String
+  action        String
+  description   String
+  old_value     String?
+  new_value     String?
+  createdAt     DateTime @default(now())
+  created_by_id String
+  users         users    @relation(fields: [created_by_id], references: [id])
+  tasks         tasks    @relation(fields: [task_id], references: [id], onDelete: Cascade)
+}
+
+model task_notes {
+  id            String   @id
+  task_id       String
+  content       String
+  is_internal   Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  created_by_id String
+  users         users    @relation(fields: [created_by_id], references: [id])
+  tasks         tasks    @relation(fields: [task_id], references: [id], onDelete: Cascade)
+}
+
+model task_templates {
+  id                          String       @id
+  name                        String
+  description                 String?
+  taskType                    TaskType
+  category                    TaskCategory
+  priority                    TaskPriority @default(MEDIUM)
+  default_duration            Int?
+  due_date_offset             Int?
+  default_fee_amount          Decimal?
+  estimated_hours             Int?
+  default_assignee_role       String?
+  applicable_compliance_types String[]
+  required_documents          String[]
+  checklist_items             Json?
+  workflow_steps              Json?
+  trigger_events              String[]
+  client_types                String[]
+  isActive                    Boolean      @default(true)
+  createdAt                   DateTime     @default(now())
+  updatedAt                   DateTime
+  tasks                       tasks[]
+}
+
+model tasks {
+  id                String       @id
+  client_id         String
+  title             String
+  description       String?
+  taskType          TaskType
+  category          TaskCategory
+  priority          TaskPriority @default(MEDIUM)
+  status            TaskStatus   @default(PENDING)
+  assigned_to_id    String?
+  parent_task_id    String?
+  template_id       String?
+  due_date          DateTime?
+  start_date        DateTime?
+  completed_at      DateTime?
+  estimated_hours   Int?
+  actual_hours      Int?
+  fee_amount        Decimal?
+  workflow_data     Json?
+  approval_required Boolean      @default(false)
+  approved_by       String?
+  approved_at       DateTime?
+  is_recurring      Boolean      @default(false)
+  recurrence_rule   String?
+  next_due_date     DateTime?
+  notes             String?
+  createdAt         DateTime     @default(now())
+  updatedAt         DateTime
+  created_by_id     String
+  updated_by_id     String?
+
+  // Compliance Integration (NEW)
+  source_type                TaskSource @default(MANUAL)
+  compliance_template_id     String?
+  compliance_subscription_id String?
+  compliance_period          String?
+
+  // Workflow Integration (NEW)
+  has_workflow      Boolean @default(false)
+  workflow_id       String?
+  is_milestone_task Boolean @default(false)
+  milestone_id      String?
+
+  // Dependencies & Blocking (NEW)
+  is_blocked               Boolean  @default(false)
+  blocked_by_task_ids      String[]
+  blocking_override_reason String?
+  blocking_override_by     String?
+
+  // Checklist Management (NEW)
+  checklist_items        Json?
+  checklist_progress     Int      @default(0)
+  optional_items_enabled String[]
+
+  // Time Tracking (NEW)
+  current_assignee_id   String?
+  time_tracking_enabled Boolean @default(true)
+  total_time_spent_mins Int     @default(0)
+  is_currently_active   Boolean @default(false)
+
+  // Review & Approval (NEW)
+  requires_review Boolean       @default(false)
+  review_status   ReviewStatus?
+  reviewed_by_id  String?
+  reviewed_at     DateTime?
+  approval_status ReviewStatus?
+
+  // Client Communication (NEW)
+  send_ack_to_client Boolean   @default(false)
+  client_notified_at DateTime?
+  client_ack_sent    Boolean   @default(false)
+
+  // Customization Tracking (NEW)
+  is_customized            Boolean @default(false)
+  customized_from_template Boolean @default(false)
+  custom_fields            Json?
+
+  audit_logs                        audit_logs[]
+  billing_info                      billing_info[]
+  communication_logs                communication_logs[]
+  compliance_calendar               compliance_calendar[]
+  documents                         documents[]
+  notifications                     notifications[]
+  task_activities                   task_activities[]
+  task_notes                        task_notes[]
+  users_tasks_assigned_to_idTousers users?                           @relation("tasks_assigned_to_idTousers", fields: [assigned_to_id], references: [id])
+  clients                           clients                          @relation(fields: [client_id], references: [id])
+  users_tasks_created_by_idTousers  users                            @relation("tasks_created_by_idTousers", fields: [created_by_id], references: [id])
+  tasks                             tasks?                           @relation("tasksTotasks", fields: [parent_task_id], references: [id])
+  other_tasks                       tasks[]                          @relation("tasksTotasks")
+  task_templates                    task_templates?                  @relation(fields: [template_id], references: [id])
+  users_tasks_updated_by_idTousers  users?                           @relation("tasks_updated_by_idTousers", fields: [updated_by_id], references: [id])
+  compliance_subscription           client_compliance_subscriptions? @relation(fields: [compliance_subscription_id], references: [id])
+  workflow                          task_workflows[]
+  time_tracking                     task_time_tracking[]
+  reviews                           task_reviews[]
+  related_notice                    compliance_notices[]             @relation("NoticeTask")
+  document_requests                 document_requests[]
+
+  @@index([assigned_to_id])
+  @@index([client_id])
+  @@index([due_date])
+  @@index([status])
+  @@index([taskType])
+}
+
+model telegram_bots {
+  id                     String                   @id
+  ca_firm_id             String?
+  user_id                String?
+  bot_token              String                   @unique
+  bot_username           String
+  bot_name               String
+  bot_description        String?
+  is_active              Boolean                  @default(true)
+  webhook_url            String?
+  webhook_secret         String?
+  max_connections        Int                      @default(40)
+  allowed_updates        Json?
+  last_health_check      DateTime?
+  health_status          TelegramBotStatus        @default(UNKNOWN)
+  error_count            Int                      @default(0)
+  last_error             String?
+  stats_messages_sent    Int                      @default(0)
+  stats_messages_failed  Int                      @default(0)
+  createdAt              DateTime                 @default(now())
+  updatedAt              DateTime
+  ca_firms               ca_firms?                @relation(fields: [ca_firm_id], references: [id], onDelete: Cascade)
+  users                  users?                   @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  telegram_chat_mappings telegram_chat_mappings[]
+  telegram_messages      telegram_messages[]
+
+  @@index([ca_firm_id])
+  @@index([health_status])
+  @@index([is_active])
+  @@index([user_id])
+}
+
+model telegram_chat_mappings {
+  id                 String                    @id
+  telegram_bot_id    String
+  client_id          String
+  chat_id            String
+  chat_type          TelegramChatType          @default(PRIVATE)
+  client_name        String
+  client_phone       String?
+  client_email       String?
+  is_active          Boolean                   @default(true)
+  is_blocked         Boolean                   @default(false)
+  last_message_at    DateTime?
+  message_count      Int                       @default(0)
+  joined_at          DateTime                  @default(now())
+  notes              String?
+  createdAt          DateTime                  @default(now())
+  updatedAt          DateTime
+  clients            clients                   @relation(fields: [client_id], references: [id], onDelete: Cascade)
+  telegram_bots      telegram_bots             @relation(fields: [telegram_bot_id], references: [id], onDelete: Cascade)
+  telegram_messages  telegram_messages[]
+  whatsapp_doc_queue whatsapp_document_queue[]
+
+  @@unique([telegram_bot_id, chat_id])
+  @@index([client_id])
+  @@index([is_active])
+  @@index([last_message_at])
+  @@index([telegram_bot_id])
+}
+
+model telegram_messages {
+  id                     String                 @id
+  telegram_bot_id        String
+  chat_mapping_id        String
+  message_id             Int
+  direction              MessageDirection       @default(OUTGOING)
+  message_type           TelegramMessageType    @default(TEXT)
+  content                String
+  template_id            String?
+  template_variables     Json?
+  status                 MessageStatus          @default(PENDING)
+  sent_at                DateTime?
+  delivered_at           DateTime?
+  read_at                DateTime?
+  failed_at              DateTime?
+  error_message          String?
+  retry_count            Int                    @default(0)
+  telegram_response      Json?
+  cost                   Decimal?               @default(0)
+  metadata               Json?
+  createdAt              DateTime               @default(now())
+  updatedAt              DateTime
+  telegram_chat_mappings telegram_chat_mappings @relation(fields: [chat_mapping_id], references: [id], onDelete: Cascade)
+  telegram_bots          telegram_bots          @relation(fields: [telegram_bot_id], references: [id], onDelete: Cascade)
+
+  @@index([chat_mapping_id])
+  @@index([direction])
+  @@index([sent_at])
+  @@index([status])
+  @@index([telegram_bot_id])
+}
+
+model user_roles {
+  userId     String
+  roleId     String
+  assignedAt DateTime @default(now())
+  assignedBy String?
+  roles      roles    @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  users      users    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([userId, roleId])
+}
+
+model users {
+  id                                String                      @id
+  email                             String                      @unique
+  name                              String
+  phone                             String?
+  password                          String
+  avatar                            String?
+  isActive                          Boolean                     @default(true)
+  requires_password_reset           Boolean                     @default(false)
+  createdAt                         DateTime                    @default(now())
+  updatedAt                         DateTime
+  firm_id                           String?
+  audit_logs                        audit_logs[]
+  ca_firm_users                     ca_firm_users[]
+  clients                           clients[]
+  communication_logs                communication_logs[]
+  documents                         documents[]
+  mobile_devices                    mobile_devices[]
+  notifications                     notifications[]
+  password_reset_tokens             password_reset_tokens[]
+  email_verification_tokens         email_verification_tokens[]
+  magic_link_tokens                 magic_link_tokens[]
+  email_logs                        email_logs[]
+  task_activities                   task_activities[]
+  task_notes                        task_notes[]
+  tasks_tasks_assigned_to_idTousers tasks[]                     @relation("tasks_assigned_to_idTousers")
+  tasks_tasks_created_by_idTousers  tasks[]                     @relation("tasks_created_by_idTousers")
+  tasks_tasks_updated_by_idTousers  tasks[]                     @relation("tasks_updated_by_idTousers")
+  telegram_bots                     telegram_bots[]
+  user_roles                        user_roles[]
+  time_tracking                     task_time_tracking[]
+  reviews_given                     task_reviews[]              @relation("ReviewerUser")
+  approvals_given                   task_reviews[]              @relation("ApproverUser")
+  notification_subs                 notification_subscriptions[]
+  firms                             firms?                      @relation(fields: [firm_id], references: [id])
+}
+
+// ========================================
+// COMPLIANCE & TASK MANAGEMENT SYSTEM
+// ========================================
+
+model compliance_templates {
+  id                           String              @id @default(cuid())
+  code                         String              @unique
+  name                         String
+  description                  String?
+  compliance_category          ComplianceCategory
+  applicable_client_types      String[]
+  frequency                    ComplianceFrequency
+  due_date_formula             String
+  internal_offset_days         Int                 @default(-2)
+  ca_can_override_offset       Boolean             @default(true)
+  has_workflow                 Boolean             @default(false)
+  workflow_config              Json?
+  requires_dependencies        Boolean             @default(false)
+  core_checklist               Json
+  optional_checklist           Json?
+  default_enabled_optional     String[]
+  required_documents           String[]
+  optional_documents           String[]
+  default_assignee_role        String?
+  requires_manager_review      Boolean             @default(false)
+  requires_ca_approval         Boolean             @default(false)
+  send_ack_to_client           Boolean             @default(true)
+  client_notification_template String?
+  is_system_template           Boolean             @default(true)
+  is_active                    Boolean             @default(true)
+  version                      String              @default("1.0")
+  created_by_admin_id          String?
+  is_premium_feature           Boolean             @default(false)
+  requires_addon               String?
+  createdAt                    DateTime            @default(now())
+  updatedAt                    DateTime            @updatedAt
+
+  client_subscriptions  client_compliance_subscriptions[]
+  custom_templates      ca_firm_custom_templates[]
+  document_requirements document_requirements[]
+
+  @@index([compliance_category])
+  @@index([frequency])
+  @@index([is_active])
+}
+
+model ca_firm_custom_templates {
+  id                      String              @id @default(cuid())
+  ca_firm_id              String
+  cloned_from_template_id String?
+  is_clone                Boolean             @default(false)
+  code                    String              @unique
+  name                    String
+  description             String?
+  compliance_category     ComplianceCategory
+  frequency               ComplianceFrequency
+  due_date_formula        String
+  internal_offset_days    Int
+  core_checklist          Json
+  optional_checklist      Json?
+  required_documents      String[]
+  workflow_config         Json?
+  created_by_user_id      String
+  is_active               Boolean             @default(true)
+  createdAt               DateTime            @default(now())
+  updatedAt               DateTime            @updatedAt
+
+  ca_firms             ca_firms              @relation(fields: [ca_firm_id], references: [id], onDelete: Cascade)
+  compliance_templates compliance_templates? @relation(fields: [cloned_from_template_id], references: [id])
+
+  @@index([ca_firm_id])
+  @@index([is_active])
+}
+
+model client_compliance_subscriptions {
+  id                        String    @id @default(cuid())
+  client_id                 String
+  template_id               String
+  ca_firm_id                String
+  is_enabled                Boolean   @default(true)
+  auto_generate_tasks       Boolean   @default(true)
+  start_date                DateTime
+  end_date                  DateTime?
+  custom_internal_offset    Int?
+  custom_assignee_id        String?
+  custom_checklist          Json?
+  custom_workflow_config    Json?
+  custom_anchor_dates       Json?
+  send_client_notifications Boolean   @default(true)
+  notification_email        String?
+  subscribed_by_user_id     String
+  subscribed_at             DateTime  @default(now())
+  last_task_generated_at    DateTime?
+  next_task_due_date        DateTime?
+  createdAt                 DateTime  @default(now())
+  updatedAt                 DateTime  @updatedAt
+
+  clients              clients              @relation(fields: [client_id], references: [id], onDelete: Cascade)
+  compliance_templates compliance_templates @relation(fields: [template_id], references: [id])
+  ca_firms             ca_firms             @relation(fields: [ca_firm_id], references: [id], onDelete: Cascade)
+  generated_tasks      tasks[]
+
+  @@unique([client_id, template_id])
+  @@index([ca_firm_id])
+  @@index([is_enabled])
+  @@index([next_task_due_date])
+}
+
+model task_workflows {
+  id                       String       @id @default(cuid())
+  template_id              String?
+  task_id                  String?
+  workflow_name            String
+  workflow_type            WorkflowType
+  milestones               Json
+  task_sequence            Json
+  enforce_blocking         Boolean      @default(true)
+  allow_override           Boolean      @default(true)
+  override_requires_reason Boolean      @default(true)
+  anchor_dates             Json?
+  calculated_dates         Json?
+  override_dates           Json?
+  is_active                Boolean      @default(true)
+  createdAt                DateTime     @default(now())
+  updatedAt                DateTime     @updatedAt
+
+  tasks tasks? @relation(fields: [task_id], references: [id])
+
+  @@index([workflow_type])
+  @@index([task_id])
+}
+
+model task_time_tracking {
+  id                    String             @id @default(cuid())
+  task_id               String
+  user_id               String
+  ca_firm_id            String
+  started_at            DateTime
+  paused_at             DateTime?
+  resumed_at            DateTime?
+  completed_at          DateTime?
+  active_duration_mins  Int                @default(0)
+  elapsed_duration_mins Int                @default(0)
+  session_status        TimeTrackingStatus
+  is_billable           Boolean            @default(true)
+  work_description      String?
+  issues_faced          String?
+  createdAt             DateTime           @default(now())
+  updatedAt             DateTime           @updatedAt
+
+  tasks    tasks    @relation(fields: [task_id], references: [id], onDelete: Cascade)
+  users    users    @relation(fields: [user_id], references: [id])
+  ca_firms ca_firms @relation(fields: [ca_firm_id], references: [id], onDelete: Cascade)
+
+  @@index([task_id])
+  @@index([user_id])
+  @@index([ca_firm_id])
+  @@index([session_status])
+}
+
+model task_reviews {
+  id                  String       @id @default(cuid())
+  task_id             String
+  reviewer_id         String
+  ca_firm_id          String
+  review_type         ReviewType
+  review_status       ReviewStatus
+  reviewed_at         DateTime?
+  comments            String?
+  requires_rework     Boolean      @default(false)
+  rework_notes        String?
+  approved_at         DateTime?
+  approved_by_id      String?
+  send_to_client      Boolean      @default(false)
+  sent_to_client_at   DateTime?
+  client_ack_template String?
+  documents_to_send   String[]
+  createdAt           DateTime     @default(now())
+  updatedAt           DateTime     @updatedAt
+
+  tasks    tasks    @relation(fields: [task_id], references: [id], onDelete: Cascade)
+  reviewer users    @relation("ReviewerUser", fields: [reviewer_id], references: [id])
+  approver users?   @relation("ApproverUser", fields: [approved_by_id], references: [id])
+  ca_firms ca_firms @relation(fields: [ca_firm_id], references: [id], onDelete: Cascade)
+
+  @@index([task_id])
+  @@index([reviewer_id])
+  @@index([review_status])
+}
+
+model compliance_notices {
+  id                   String               @id @default(cuid())
+  client_id            String
+  ca_firm_id           String
+  notice_number        String
+  notice_type          NoticeType
+  authority            NoticeAuthority
+  document_id          String
+  uploaded_at          DateTime             @default(now())
+  ocr_extracted_data   Json?
+  notice_date          DateTime
+  reply_deadline       DateTime
+  replied_at           DateTime?
+  auto_created_task_id String?
+  is_premium_feature   Boolean              @default(true)
+  feature_enabled      Boolean              @default(false)
+  status               NoticeStatus
+  priority             NotificationPriority @default(HIGH)
+  createdAt            DateTime             @default(now())
+  updatedAt            DateTime             @updatedAt
+
+  clients      clients   @relation(fields: [client_id], references: [id], onDelete: Cascade)
+  ca_firms     ca_firms  @relation(fields: [ca_firm_id], references: [id], onDelete: Cascade)
+  document     documents @relation(fields: [document_id], references: [id])
+  created_task tasks?    @relation("NoticeTask", fields: [auto_created_task_id], references: [id])
+
+  @@index([ca_firm_id])
+  @@index([reply_deadline])
+  @@index([status])
+}
+
+model document_requirements {
+  id                    String     @id @default(cuid())
+  template_id           String
+  requirement_name      String
+  description           String?
+  period_type           PeriodType
+  period_offset         Int        @default(0)
+  is_mandatory          Boolean    @default(true)
+  due_before_task_start Boolean    @default(true)
+  sample_formats        String[]
+  createdAt             DateTime   @default(now())
+  updatedAt             DateTime   @updatedAt
+
+  compliance_templates compliance_templates           @relation(fields: [template_id], references: [id], onDelete: Cascade)
+  client_overrides     client_document_requirements[]
+
+  @@index([template_id])
+}
+
+model client_document_requirements {
+  id                    String   @id @default(cuid())
+  client_id             String
+  requirement_id        String
+  ca_firm_id            String
+  is_mandatory_override Boolean?
+  custom_description    String?
+  custom_due_offset     Int?
+  is_exempted           Boolean  @default(false)
+  exemption_reason      String?
+  exempted_by_user_id   String?
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  clients      clients               @relation(fields: [client_id], references: [id], onDelete: Cascade)
+  requirements document_requirements @relation(fields: [requirement_id], references: [id], onDelete: Cascade)
+  ca_firms     ca_firms              @relation(fields: [ca_firm_id], references: [id], onDelete: Cascade)
+
+  @@unique([client_id, requirement_id])
+  @@index([ca_firm_id])
+}
+
+model document_requests {
+  id                    String               @id @default(cuid())
+  task_id               String
+  client_id             String
+  ca_firm_id            String
+  requirement_id        String?
+  request_type          RequestType
+  request_status        RequestStatus
+  requested_documents   Json
+  requested_at          DateTime             @default(now())
+  due_date              DateTime
+  communication_channel CommunicationChannel
+  initial_message_sent  Boolean              @default(false)
+  reminder_count        Int                  @default(0)
+  last_reminder_at      DateTime?
+  verified_by_user_id   String?
+  verified_at           DateTime?
+  verification_notes    String?
+  createdAt             DateTime             @default(now())
+  updatedAt             DateTime             @updatedAt
+
+  tasks              tasks                        @relation(fields: [task_id], references: [id], onDelete: Cascade)
+  clients            clients                      @relation(fields: [client_id], references: [id], onDelete: Cascade)
+  ca_firms           ca_firms                     @relation(fields: [ca_firm_id], references: [id], onDelete: Cascade)
+  uploaded_documents document_request_uploads[]
+  reminders          document_request_reminders[]
+
+  @@index([task_id])
+  @@index([client_id])
+  @@index([ca_firm_id])
+  @@index([request_status])
+}
+
+model document_request_uploads {
+  id                  String             @id @default(cuid())
+  request_id          String
+  document_id         String
+  uploaded_by_type    UploaderType
+  uploaded_by_user_id String?
+  upload_channel      UploadChannel
+  upload_status       UploadStatus
+  verification_status VerificationStatus @default(PENDING)
+  verified_by_user_id String?
+  verified_at         DateTime?
+  rejection_reason    String?
+  replacement_of_id   String?
+  createdAt           DateTime           @default(now())
+  updatedAt           DateTime           @updatedAt
+
+  requests  document_requests @relation(fields: [request_id], references: [id], onDelete: Cascade)
+  documents documents         @relation(fields: [document_id], references: [id])
+
+  @@index([request_id])
+  @@index([verification_status])
+}
+
+model document_request_reminders {
+  id                    String               @id @default(cuid())
+  request_id            String
+  reminder_type         ReminderType
+  communication_channel CommunicationChannel
+  sent_at               DateTime             @default(now())
+  message_template_id   String?
+  sent_successfully     Boolean              @default(true)
+  error_message         String?
+  createdAt             DateTime             @default(now())
+
+  requests document_requests @relation(fields: [request_id], references: [id], onDelete: Cascade)
+
+  @@index([request_id])
+  @@index([sent_at])
+}
+
+model client_portal_sessions {
+  id                 String   @id @default(cuid())
+  client_id          String
+  session_token      String   @unique
+  ip_address         String?
+  user_agent         String?
+  documents_uploaded Int      @default(0)
+  documents_viewed   Int      @default(0)
+  tasks_viewed       Int      @default(0)
+  created_at         DateTime @default(now())
+  expires_at         DateTime
+  last_activity_at   DateTime @default(now())
+
+  clients clients @relation(fields: [client_id], references: [id], onDelete: Cascade)
+
+  @@index([client_id])
+  @@index([session_token])
+  @@index([expires_at])
+}
+
+model document_communication_templates {
+  id                    String                        @id @default(cuid())
+  ca_firm_id            String
+  template_name         String
+  category              TemplateCommunicationCategory
+  communication_channel CommunicationChannel
+  subject               String?
+  message_body          String
+  placeholders          String[]
+  is_active             Boolean                       @default(true)
+  is_default            Boolean                       @default(false)
+  createdAt             DateTime                      @default(now())
+  updatedAt             DateTime                      @updatedAt
+
+  ca_firms ca_firms @relation(fields: [ca_firm_id], references: [id], onDelete: Cascade)
+
+  @@index([ca_firm_id])
+  @@index([category])
+}
+
+model whatsapp_document_queue {
+  id                             String               @id @default(cuid())
+  ca_firm_id                     String
+  chat_mapping_id                String
+  telegram_message_id            String
+  original_filename              String
+  mime_type                      String
+  file_size_bytes                Int
+  r2_temp_path                   String
+  classification_status          ClassificationStatus
+  ai_suggested_category          String?
+  ai_confidence                  Float?
+  manually_assigned_to_client_id String?
+  manually_assigned_to_task_id   String?
+  assigned_by_user_id            String?
+  assigned_at                    DateTime?
+  final_document_id              String?
+  is_processed                   Boolean              @default(false)
+  processed_at                   DateTime?
+  notes                          String?
+  createdAt                      DateTime             @default(now())
+  updatedAt                      DateTime             @updatedAt
+
+  ca_firms               ca_firms               @relation(fields: [ca_firm_id], references: [id], onDelete: Cascade)
+  telegram_chat_mappings telegram_chat_mappings @relation(fields: [chat_mapping_id], references: [id], onDelete: Cascade)
+
+  @@index([ca_firm_id])
+  @@index([classification_status])
+  @@index([is_processed])
+}
+
+// ============================================================================
+// WhatsApp Business Platform Tables
+// ============================================================================
+
+model whatsapp_accounts {
+  id                    String   @id @default(cuid())
+  ca_firm_id            String
+  organization_id       String   @unique
+  waba_id               String   @unique
+  phone_number_id       String   @unique
+  phone_number          String
+  display_name          String
+  access_token          String   @db.Text
+  is_active             Boolean  @default(true)
+  webhook_verify_token  String?
+  quality_rating        String?
+  messaging_limit       String?
+  last_synced_at        DateTime?
+  created_at            DateTime @default(now())
+  updated_at            DateTime @updatedAt
+
+  ca_firm       ca_firms                 @relation(fields: [ca_firm_id], references: [id], onDelete: Cascade)
+  conversations whatsapp_conversations[]
+  contacts      whatsapp_contacts[]
+  message_queue whatsapp_message_queue[]
+  bot_flows     whatsapp_bot_flows[]
+
+  @@index([ca_firm_id])
+  @@index([organization_id])
+  @@index([waba_id])
+}
+
+model whatsapp_contacts {
+  id                       String    @id @default(cuid())
+  whatsapp_account_id      String
+  organization_id          String
+  phone_number             String
+  wa_id                    String?
+  name                     String?
+  profile_name             String?
+  client_id                String?
+  is_blocked               Boolean   @default(false)
+  opted_in                 Boolean   @default(false)
+  opted_in_at              DateTime?
+  last_message_at          DateTime?
+  last_inbound_at          DateTime?
+  last_outbound_at         DateTime?
+  total_inbound_messages   Int       @default(0)
+  total_outbound_messages  Int       @default(0)
+  created_at               DateTime  @default(now())
+  updated_at               DateTime  @updatedAt
+
+  whatsapp_account whatsapp_accounts        @relation(fields: [whatsapp_account_id], references: [id], onDelete: Cascade)
+  conversations    whatsapp_conversations[]
+  messages         whatsapp_messages[]
+
+  @@unique([whatsapp_account_id, phone_number])
+  @@index([organization_id])
+  @@index([phone_number])
+  @@index([client_id])
+}
+
+model whatsapp_conversations {
+  id                     String                      @id @default(cuid())
+  whatsapp_account_id    String
+  contact_id             String
+  organization_id        String
+  status                 WhatsAppConversationStatus  @default(OPEN)
+  assigned_to            String?
+  last_message_at        DateTime?
+  last_message_preview   String?
+  last_inbound_at        DateTime?
+  last_outbound_at       DateTime?
+  message_count          Int                         @default(0)
+  unread_count           Int                         @default(0)
+  window_expires_at      DateTime?
+  bot_mode               BotMode                     @default(BOT)
+  is_bot_active          Boolean                     @default(true)
+  bot_flow_id            String?
+  bot_step               String?
+  bot_context            Json?
+  tags                   String[]
+  metadata               Json?
+  created_at             DateTime                    @default(now())
+  updated_at             DateTime                    @updatedAt
+
+  account  whatsapp_accounts   @relation(fields: [whatsapp_account_id], references: [id], onDelete: Cascade)
+  contact  whatsapp_contacts   @relation(fields: [contact_id], references: [id], onDelete: Cascade)
+  messages whatsapp_messages[]
+
+  @@index([whatsapp_account_id])
+  @@index([contact_id])
+  @@index([organization_id])
+  @@index([status])
+  @@index([assigned_to])
+}
+
+model whatsapp_messages {
+  id                   String               @id @default(cuid())
+  conversation_id      String
+  contact_id           String?
+  wamid                String?              @unique
+  direction            MessageDirection
+  type                 WhatsAppMessageType
+  message_type         WhatsAppMessageType?
+  content              String?              @db.Text
+  media_id             String?
+  media_url            String?
+  media_mime_type      String?
+  media_size           Int?
+  media_filename       String?
+  template_name        String?
+  template_language    String?
+  interactive_type     String?
+  interactive_response Json?
+  button_payload       String?
+  list_payload         String?
+  reply_to_wamid       String?
+  status               MessageStatus        @default(PENDING)
+  status_timestamp     DateTime?
+  sent_at              DateTime?
+  delivered_at         DateTime?
+  read_at              DateTime?
+  failed_at            DateTime?
+  error_code           String?
+  error_message        String?
+  sent_by_id           String?
+  metadata             Json?
+  created_at           DateTime             @default(now())
+  updated_at           DateTime             @updatedAt
+
+  conversation whatsapp_conversations @relation(fields: [conversation_id], references: [id], onDelete: Cascade)
+  contact      whatsapp_contacts?     @relation(fields: [contact_id], references: [id])
+
+  @@index([conversation_id])
+  @@index([contact_id])
+  @@index([wamid])
+  @@index([status])
+  @@index([created_at])
+}
+
+model whatsapp_message_queue {
+  id                   String                    @id @default(cuid())
+  organization_id      String
+  whatsapp_account_id  String
+  to_phone             String
+  message_type         WhatsAppQueueMessageType
+  payload              Json
+  priority             Int                       @default(0)
+  status               MessageStatus             @default(PENDING)
+  scheduled_at         DateTime?
+  processing_at        DateTime?
+  completed_at         DateTime?
+  error_code           String?
+  error_message        String?
+  attempts             Int                       @default(0)
+  max_attempts         Int                       @default(3)
+  next_retry_at        DateTime?
+  created_at           DateTime                  @default(now())
+  updated_at           DateTime                  @updatedAt
+
+  whatsapp_account whatsapp_accounts @relation(fields: [whatsapp_account_id], references: [id], onDelete: Cascade)
+
+  @@index([organization_id])
+  @@index([whatsapp_account_id])
+  @@index([status])
+  @@index([scheduled_at])
+  @@index([priority, created_at])
+}
+
+// ============================================================================
+// Notification Subscriptions Table
+// ============================================================================
+
+model notification_subscriptions {
+  id          String   @id @default(cuid())
+  ca_firm_id  String
+  user_id     String?
+  type        String   // 'WEBPUSH', 'FIREBASE', 'EMAIL'
+  endpoint    String?  // For web push
+  p256dh      String?  // For web push
+  auth        String?  // For web push
+  token       String?  // For Firebase
+  platform    String?  // 'web', 'android', 'ios'
+  device_name String?
+  is_active   Boolean  @default(true)
+  created_at  DateTime @default(now())
+  updated_at  DateTime @updatedAt
+
+  ca_firm ca_firms @relation(fields: [ca_firm_id], references: [id], onDelete: Cascade)
+  user    users?   @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@index([ca_firm_id])
+  @@index([user_id])
+  @@index([type])
+  @@index([is_active])
+}
+
+// ============================================================================
+// WhatsApp Bot Flows Table
+// ============================================================================
+
+model whatsapp_bot_flows {
+  id          String   @id @default(cuid())
+  account_id  String
+  name        String
+  description String?
+  trigger     Json     // { type: 'keyword'|'regex'|'default'|'button'|'list', value?: string, patterns?: string[] }
+  steps       Json     // Array of BotStep objects
+  is_active   Boolean  @default(true)
+  priority    Int      @default(0)
+  created_at  DateTime @default(now())
+  updated_at  DateTime @updatedAt
+  created_by  String?
+
+  account whatsapp_accounts @relation(fields: [account_id], references: [id], onDelete: Cascade)
+
+  @@index([account_id])
+  @@index([is_active])
+  @@index([priority])
+}
+
+enum AccessLevel {
+  PUBLIC
+  CLIENT_ACCESS
+  INTERNAL
+  CONFIDENTIAL
+  RESTRICTED
+}
+
+enum BotMode {
+  BOT
+  HUMAN
+  HYBRID
+}
+
+enum BillingStatus {
+  PENDING
+  INVOICED
+  PAID
+  PARTIAL_PAID
+  OVERDUE
+  CANCELLED
+}
+
+enum BillingType {
+  TASK_BASED
+  RETAINER
+  HOURLY
+  FIXED_MONTHLY
+  ANNUAL_CONTRACT
+}
+
+enum ClientStatus {
+  ACTIVE
+  INACTIVE
+  ARCHIVED
+  BLACKLISTED
+}
+
+enum ClientType {
+  INDIVIDUAL
+  PARTNERSHIP
+  COMPANY
+  LLP
+  TRUST
+  HUF
+  COOPERATIVE
+  SOCIETY
+  OTHER
+}
+
+enum CommunicationChannel {
+  EMAIL
+  SMS
+  WHATSAPP
+  TELEGRAM
+  PHONE_CALL
+  IN_APP
+}
+
+enum CommunicationDirection {
+  OUTGOING
+  INCOMING
+}
+
+enum CommunicationStatus {
+  PENDING
+  SENT
+  DELIVERED
+  READ
+  FAILED
+  BOUNCED
+}
+
+enum CommunicationType {
+  REMINDER
+  ALERT
+  UPDATE
+  WELCOME
+  INVOICE
+  RECEIPT
+  DOCUMENT_REQUEST
+  COMPLIANCE_ALERT
+  TASK_ASSIGNMENT
+}
+
+enum ComplianceStatus {
+  PENDING
+  IN_PROGRESS
+  FILED
+  ACKNOWLEDGED
+  REJECTED
+  REVISED
+}
+
+enum ComplianceType {
+  GST_MONTHLY
+  GST_QUARTERLY
+  GST_ANNUAL
+  TDS_MONTHLY
+  TDS_QUARTERLY
+  ITR_INDIVIDUAL
+  ITR_COMPANY
+  AUDIT_TAX
+  AUDIT_STATUTORY
+  ROC_ANNUAL_RETURN
+  ROC_AOC4
+  ESI_MONTHLY
+  PF_MONTHLY
+  CUSTOM
+}
+
+enum DocumentCategory {
+  CLIENT_DOCUMENTS
+  TAX_RETURNS
+  CERTIFICATES
+  AGREEMENTS
+  BANK_STATEMENTS
+  INVOICES
+  RECEIPTS
+  COMPLIANCE_DOCS
+  AUDIT_REPORTS
+  INTERNAL_DOCS
+  OTHER
+}
+
+enum DocumentType {
+  PDF
+  WORD
+  EXCEL
+  IMAGE
+  TEXT
+  JSON
+  XML
+  ZIP
+  OTHER
+}
+
+enum MessageDirection {
+  INCOMING
+  OUTGOING
+}
+
+enum MessageStatus {
+  PENDING
+  SENT
+  DELIVERED
+  READ
+  FAILED
+  CANCELLED
+}
+
+enum NotificationPriority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+enum NotificationType {
+  DUE_DATE_REMINDER
+  TASK_ASSIGNMENT
+  TASK_COMPLETION
+  COMPLIANCE_ALERT
+  PAYMENT_REMINDER
+  DOCUMENT_REQUEST
+  SYSTEM_ALERT
+}
+
+enum PackageType {
+  COMPANY
+  INDIVIDUAL
+  PARTNERSHIP
+  LLP
+  TRUST
+  HUF
+  GENERAL
+}
+
+enum PaymentMode {
+  CASH
+  BANK_TRANSFER
+  CHEQUE
+  UPI
+  CARD
+  OTHER
+}
+
+enum PushNotificationStatus {
+  PENDING
+  SENT
+  DELIVERED
+  READ
+  FAILED
+  EXPIRED
+}
+
+enum PushNotificationType {
+  TASK_ASSIGNED
+  TASK_DUE_SOON
+  TASK_OVERDUE
+  TASK_COMPLETED
+  TASK_STATUS_CHANGED
+  CLIENT_MESSAGE
+  WHATSAPP_MESSAGE
+  SYSTEM_UPDATE
+  COMPLIANCE_REMINDER
+  GENERAL_ALERT
+}
+
+enum StorageType {
+  LOCAL
+  GOOGLE_DRIVE
+  ONEDRIVE
+  AWS_S3
+  OTHER_CLOUD
+  FIREBASE_STORAGE
+}
+
+enum SyncStatus {
+  PENDING
+  IN_PROGRESS
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+enum TallySyncMethod {
+  XML_HTTP
+  DATABASE_LOADER
+  ODBC_DIRECT
+}
+
+enum TaskCategory {
+  MONTHLY
+  QUARTERLY
+  ANNUAL
+  AD_HOC
+  RECURRING
+}
+
+enum TaskPriority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+enum TaskStatus {
+  PENDING
+  ASSIGNED
+  IN_PROGRESS
+  REVIEW
+  COMPLETED
+  ON_HOLD
+  CANCELLED
+  OVERDUE
+}
+
+enum TaskType {
+  GST_RETURN
+  TDS_RETURN
+  ITR_FILING
+  AUDIT
+  ROC_FILING
+  BOOKKEEPING
+  CONSULTING
+  TAX_PLANNING
+  COMPLIANCE_CHECK
+  DOCUMENTATION
+  OTHER
+}
+
+enum FeatureRequestStatus {
+  PENDING
+  UNDER_REVIEW
+  APPROVED
+  REJECTED
+  COMPLETED
+}
+
+enum SupportTicketStatus {
+  OPEN
+  IN_PROGRESS
+  WAITING_ON_CLIENT
+  WAITING_ON_ADMIN
+  RESOLVED
+  CLOSED
+}
+
+enum TelegramBotStatus {
+  ACTIVE
+  INACTIVE
+  ERROR
+  RATE_LIMITED
+  UNKNOWN
+}
+
+enum TelegramChatType {
+  PRIVATE
+  GROUP
+  SUPERGROUP
+  CHANNEL
+}
+
+enum TelegramMessageType {
+  TEXT
+  PHOTO
+  DOCUMENT
+  VIDEO
+  AUDIO
+  VOICE
+  STICKER
+  LOCATION
+  CONTACT
+  ANIMATION
+  VIDEO_NOTE
+}
+
+enum UserRole {
+  ADMIN
+  MANAGER
+  STAFF
+}
+
+enum AbsenceType {
+  SICK_LEAVE
+  CASUAL_LEAVE
+  PLANNED_LEAVE
+  EMERGENCY
+  UNPAID_LEAVE
+}
+
+enum StorageProvider {
+  PLATFORM_MANAGED
+  SELF_MANAGED
+}
+
+enum StorageTier {
+  BASIC
+  STANDARD
+  PREMIUM
+  ENTERPRISE
+  CUSTOM
+}
+
+// ========================================
+// NEW ENUMS FOR COMPLIANCE SYSTEM
+// ========================================
+
+enum ComplianceCategory {
+  GST
+  INCOME_TAX
+  TDS
+  ROC
+  AUDIT
+  BOOKKEEPING
+  PAYROLL
+  ESI_PF
+  CUSTOM
+}
+
+enum ComplianceFrequency {
+  DAILY
+  WEEKLY
+  MONTHLY
+  QUARTERLY
+  ANNUAL
+  EVENT_BASED
+  ADHOC
+}
+
+enum WorkflowType {
+  SIMPLE_SEQUENCE
+  MILESTONE_BASED
+  APPROVAL_CHAIN
+  CUSTOM
+}
+
+enum TimeTrackingStatus {
+  NOT_STARTED
+  IN_PROGRESS
+  PAUSED
+  COMPLETED
+  ABANDONED
+}
+
+enum ReviewType {
+  STAFF_TO_MANAGER
+  MANAGER_TO_CA
+  PEER_REVIEW
+}
+
+enum ReviewStatus {
+  PENDING
+  UNDER_REVIEW
+  APPROVED
+  REJECTED
+  REWORK_REQUIRED
+}
+
+enum TaskSource {
+  MANUAL
+  COMPLIANCE_AUTO
+  WORKFLOW_AUTO
+  NOTICE_AUTO
+  RECURRING
+}
+
+enum NoticeType {
+  GST_NOTICE
+  INCOME_TAX_NOTICE
+  TDS_NOTICE
+  ROC_NOTICE
+  CUSTOM
+}
+
+enum NoticeAuthority {
+  GST_DEPARTMENT
+  INCOME_TAX_DEPARTMENT
+  ROC_MCA
+  CUSTOMS
+  OTHER
+}
+
+enum NoticeStatus {
+  RECEIVED
+  UNDER_REVIEW
+  REPLY_DRAFTED
+  REPLY_SENT
+  RESOLVED
+  ESCALATED
+}
+
+enum PeriodType {
+  SAME_PERIOD
+  PREVIOUS_PERIOD
+  QUARTER
+  FISCAL_YEAR
+  CUSTOM
+  DATE_RANGE
+}
+
+enum RequestType {
+  AUTO_COMPLIANCE
+  MANUAL_ADHOC
+  WORKFLOW_MILESTONE
+  NOTICE_RELATED
+}
+
+enum RequestStatus {
+  PENDING
+  PARTIALLY_UPLOADED
+  COMPLETED
+  UNDER_VERIFICATION
+  VERIFIED
+  REJECTED
+  OVERDUE
+  ESCALATED
+  CANCELLED
+}
+
+enum VerificationStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  NEEDS_CORRECTION
+}
+
+enum UploadChannel {
+  CLIENT_PORTAL
+  EMAIL_SIGNED_URL
+  WHATSAPP
+  STAFF_MANUAL
+}
+
+enum UploaderType {
+  CLIENT
+  STAFF
+  MANAGER
+  CA
+  SYSTEM
+}
+
+enum UploadStatus {
+  PENDING_REVIEW
+  VERIFIED
+  REJECTED
+  REPLACED
+}
+
+enum ReminderType {
+  INITIAL_REQUEST
+  FRIENDLY_REMINDER
+  URGENT_REMINDER
+  FINAL_NOTICE
+  ESCALATION_TO_CA
+}
+
+enum TemplateCommunicationCategory {
+  DOCUMENT_REQUEST
+  DOCUMENT_REMINDER
+  DOCUMENT_RECEIVED
+  DOCUMENT_REJECTED
+  TASK_COMPLETED
+  TASK_ACKNOWLEDGMENT
+}
+
+enum ClassificationStatus {
+  PENDING
+  AUTO_CLASSIFIED
+  MANUALLY_CLASSIFIED
+  NEEDS_ATTENTION
+  PROCESSED
+  DISCARDED
+}
+
+// ========================================
+// WHATSAPP BUSINESS PLATFORM ENUMS
+// ========================================
+
+enum WhatsAppMessageType {
+  TEXT
+  IMAGE
+  VIDEO
+  AUDIO
+  DOCUMENT
+  STICKER
+  LOCATION
+  CONTACTS
+  INTERACTIVE
+  TEMPLATE
+  REACTION
+}
+
+enum WhatsAppConversationStatus {
+  OPEN
+  CLOSED
+  PENDING
+  RESOLVED
+  SPAM
+}
+
+enum WhatsAppQueueMessageType {
+  TEXT
+  IMAGE
+  VIDEO
+  AUDIO
+  DOCUMENT
+  TEMPLATE
+  INTERACTIVE
+}
+
+// ========================================
+// AI CLASSIFICATION SYSTEM
+// ========================================
+
+model ai_classification_logs {
+  id                 String   @id @default(cuid())
+  organization_id    String
+  message_id         String
+  conversation_id    String
+  intent             AIIntent
+  intent_category    String
+  confidence         Float
+  sentiment          AISentiment
+  sentiment_score    Float
+  priority           AIPriority
+  language           String   @default("en")
+  entities           Json     @default("[]")
+  suggested_actions  Json     @default("[]")
+  raw_response       Json?
+  processing_time_ms Int
+  provider           String
+  model              String
+  cached             Boolean  @default(false)
+  created_at         DateTime @default(now())
+
+  @@index([organization_id])
+  @@index([message_id])
+  @@index([conversation_id])
+  @@index([intent])
+  @@index([created_at])
+}
+
+model ai_training_data {
+  id                  String   @id @default(cuid())
+  organization_id     String
+  message_id          String?
+  message_text        String   @db.Text
+  original_intent     AIIntent
+  original_confidence Float
+  corrected_intent    AIIntent
+  corrected_by        String
+  corrected_at        DateTime
+  feedback            String?
+  used_for_training   Boolean  @default(false)
+  trained_at          DateTime?
+  created_at          DateTime @default(now())
+
+  @@index([organization_id])
+  @@index([used_for_training])
+  @@index([created_at])
+}
+
+model whatsapp_canned_responses {
+  id                  String       @id @default(cuid())
+  organization_id     String
+  title               String
+  content             String       @db.Text
+  shortcut            String?
+  category            String
+  tags                String[]     @default([])
+  matching_intents    String[]     @default([])
+  matching_sentiments String[]     @default([])
+  usage_count         Int          @default(0)
+  success_rate        Float        @default(0)
+  last_used_at        DateTime?
+  is_active           Boolean      @default(true)
+  created_by          String
+  created_at          DateTime     @default(now())
+  updated_at          DateTime     @updatedAt
+
+  @@unique([organization_id, shortcut])
+  @@index([organization_id])
+  @@index([category])
+  @@index([is_active])
+}
+
+// ========================================
+// AI CLASSIFICATION ENUMS
+// ========================================
+
+enum AIIntent {
+  general_inquiry
+  product_inquiry
+  pricing_inquiry
+  order_status
+  complaint
+  feedback
+  technical_support
+  purchase_intent
+  quote_request
+  negotiation
+  follow_up
+  appointment_booking
+  document_request
+  account_update
+  cancellation
+  greeting
+  gratitude
+  spam
+  unknown
+}
+
+enum AISentiment {
+  positive
+  negative
+  neutral
+}
+
+enum AIPriority {
+  urgent
+  high
+  medium
+  low
+}
+
+// ========================================
+// EXTERNAL API & WEBHOOKS SYSTEM
+// ========================================
+
+model api_keys {
+  id              String    @id @default(cuid())
+  organization_id String
+  name            String
+  key_prefix      String
+  key_hash        String    @unique
+  scopes          String[]
+  last_used_at    DateTime?
+  expires_at      DateTime?
+  is_active       Boolean   @default(true)
+  created_by      String
+  created_at      DateTime  @default(now())
+
+  @@index([organization_id])
+  @@index([key_hash])
+  @@index([is_active])
+}
+
+model webhooks {
+  id                String    @id @default(cuid())
+  organization_id   String
+  url               String
+  secret            String
+  events            String[]
+  is_active         Boolean   @default(true)
+  description       String?
+  headers           Json?
+  failure_count     Int       @default(0)
+  last_triggered_at DateTime?
+  last_success_at   DateTime?
+  last_failure_at   DateTime?
+  created_by        String
+  created_at        DateTime  @default(now())
+  updated_at        DateTime  @updatedAt
+
+  deliveries webhook_deliveries[]
+
+  @@index([organization_id])
+  @@index([is_active])
+}
+
+model webhook_deliveries {
+  id            String    @id @default(cuid())
+  webhook_id    String
+  event         String
+  payload       Json
+  status        String    @default("pending")
+  status_code   Int?
+  response      String?
+  attempts      Int       @default(0)
+  next_retry_at DateTime?
+  created_at    DateTime  @default(now())
+  delivered_at  DateTime?
+
+  webhook webhooks @relation(fields: [webhook_id], references: [id], onDelete: Cascade)
+
+  @@index([webhook_id])
+  @@index([status])
+  @@index([next_retry_at])
+}
+
+model api_logs {
+  id               String   @id @default(cuid())
+  organization_id  String
+  api_key_id       String
+  method           String
+  path             String
+  status_code      Int
+  response_time_ms Int
+  ip_address       String?
+  user_agent       String?
+  created_at       DateTime @default(now())
+
+  @@index([organization_id])
+  @@index([api_key_id])
+  @@index([created_at])
+}
