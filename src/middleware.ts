@@ -23,7 +23,7 @@ export default withAuth(
       authorized: ({ token, req }) => {
         const { pathname } = req.nextUrl
 
-        // Public routes - always allow
+        // Public routes - always allow without auth
         const publicPaths = [
           '/',
           '/login',
@@ -32,11 +32,14 @@ export default withAuth(
           '/verify-email',
           '/pricing',
           '/features',
+          '/onboarding',
         ]
 
-        // Check if it's a public path
-        if (publicPaths.some(path => pathname === path || pathname.startsWith(path + '/'))) {
-          return true
+        // Check if it's an exact public path or starts with it
+        for (const path of publicPaths) {
+          if (pathname === path || (path !== '/' && pathname.startsWith(path + '/'))) {
+            return true
+          }
         }
 
         // API routes that are public
@@ -63,12 +66,11 @@ export default withAuth(
 export const config = {
   matcher: [
     /*
-     * Match all request paths except:
-     * - _next/static (static files)
-     * - _next/image (image optimization files)
-     * - favicon.ico (favicon file)
-     * - public folder files
+     * Match all paths except:
+     * - _next/static, _next/image (Next.js internals)
+     * - favicon.ico, images, etc.
+     * - Root path / (landing page - handle in page.tsx)
      */
-    '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
+    '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)',
   ],
 }
