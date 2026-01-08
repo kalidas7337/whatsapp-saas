@@ -23,25 +23,6 @@ export default withAuth(
       authorized: ({ token, req }) => {
         const { pathname } = req.nextUrl
 
-        // Public routes - always allow without auth
-        const publicPaths = [
-          '/',
-          '/login',
-          '/register',
-          '/forgot-password',
-          '/verify-email',
-          '/pricing',
-          '/features',
-          '/onboarding',
-        ]
-
-        // Check if it's an exact public path or starts with it
-        for (const path of publicPaths) {
-          if (pathname === path || (path !== '/' && pathname.startsWith(path + '/'))) {
-            return true
-          }
-        }
-
         // API routes that are public
         if (
           pathname.startsWith('/api/auth') ||
@@ -64,13 +45,19 @@ export default withAuth(
 )
 
 export const config = {
+  /*
+   * Only run middleware on protected routes.
+   * Exclude: landing page, auth pages, marketing pages, static files
+   */
   matcher: [
-    /*
-     * Match all paths except:
-     * - _next/static, _next/image (Next.js internals)
-     * - favicon.ico, images, etc.
-     * - Root path / (landing page - handle in page.tsx)
-     */
-    '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)',
+    '/inbox/:path*',
+    '/contacts/:path*',
+    '/analytics/:path*',
+    '/settings/:path*',
+    '/api/ai/:path*',
+    '/api/analytics/:path*',
+    '/api/billing/:path*',
+    '/api/onboarding/:path*',
+    '/api/settings/:path*',
   ],
 }
