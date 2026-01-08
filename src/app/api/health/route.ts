@@ -37,28 +37,9 @@ async function checkRedis(): Promise<'connected' | 'disconnected' | 'error' | 'n
     return 'not_configured'
   }
 
-  // Redis check requires ioredis package
-  // Return not_configured if running in standalone mode without workers
-  try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const Redis = require('ioredis')
-    const redis = new Redis(redisUrl, {
-      connectTimeout: 5000,
-      maxRetriesPerRequest: 1,
-      lazyConnect: true,
-    })
-
-    await redis.ping()
-    await redis.quit()
-    return 'connected'
-  } catch (error) {
-    // If module not found, return not_configured
-    if ((error as NodeJS.ErrnoException).code === 'MODULE_NOT_FOUND') {
-      return 'not_configured'
-    }
-    console.error('Redis health check failed:', error)
-    return 'error'
-  }
+  // Redis check disabled in standalone SaaS mode
+  // Enable when ioredis is installed and Redis is configured
+  return 'not_configured'
 }
 
 async function checkRabbitMQ(): Promise<'connected' | 'disconnected' | 'error' | 'not_configured'> {
@@ -68,22 +49,9 @@ async function checkRabbitMQ(): Promise<'connected' | 'disconnected' | 'error' |
     return 'not_configured'
   }
 
-  // RabbitMQ check requires amqplib package
-  // Return not_configured if running in standalone mode without workers
-  try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const amqp = require('amqplib')
-    const connection = await amqp.connect(rabbitmqUrl)
-    await connection.close()
-    return 'connected'
-  } catch (error) {
-    // If module not found, return not_configured
-    if ((error as NodeJS.ErrnoException).code === 'MODULE_NOT_FOUND') {
-      return 'not_configured'
-    }
-    console.error('RabbitMQ health check failed:', error)
-    return 'error'
-  }
+  // RabbitMQ check disabled in standalone SaaS mode
+  // Enable when amqplib is installed and RabbitMQ is configured
+  return 'not_configured'
 }
 
 function determineOverallStatus(checks: HealthStatus['checks']): HealthStatus['status'] {

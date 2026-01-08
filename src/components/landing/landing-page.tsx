@@ -32,7 +32,7 @@ import {
   IconUserPlus,
   IconBell,
   IconFileText,
-  IconCalculator,
+  IconAbacus,
   IconBriefcase,
   IconReceipt,
   IconClipboardCheck,
@@ -393,7 +393,7 @@ export function LandingPage() {
               highlight: 'Know who did what',
             },
             {
-              icon: IconCalculator,
+              icon: IconAbacus,
               title: 'Tally Integration',
               description: 'Auto-sync client list from Tally. Send invoices via WhatsApp. Payment reminders on autopilot.',
               highlight: 'No manual data entry',
