@@ -6,7 +6,7 @@ export default withAuth(
     const { pathname } = req.nextUrl
     const token = req.nextauth.token
 
-    // Redirect to onboarding if no organization
+    // Redirect to onboarding if no organization (only for authenticated users)
     if (
       token &&
       !token.organizationId &&
@@ -23,19 +23,29 @@ export default withAuth(
       authorized: ({ token, req }) => {
         const { pathname } = req.nextUrl
 
-        // Public routes
+        // Public routes - always allow
+        const publicPaths = [
+          '/',
+          '/login',
+          '/register',
+          '/forgot-password',
+          '/verify-email',
+          '/pricing',
+          '/features',
+        ]
+
+        // Check if it's a public path
+        if (publicPaths.some(path => pathname === path || pathname.startsWith(path + '/'))) {
+          return true
+        }
+
+        // API routes that are public
         if (
-          pathname === '/' ||
-          pathname.startsWith('/login') ||
-          pathname.startsWith('/register') ||
-          pathname.startsWith('/forgot-password') ||
-          pathname.startsWith('/verify-email') ||
-          pathname.startsWith('/pricing') ||
-          pathname.startsWith('/features') ||
           pathname.startsWith('/api/auth') ||
           pathname.startsWith('/api/webhooks') ||
-          pathname.startsWith('/api/whatsapp') || // WhatsApp internal API
-          pathname.startsWith('/api/v1') // Public API
+          pathname.startsWith('/api/whatsapp') ||
+          pathname.startsWith('/api/v1') ||
+          pathname.startsWith('/api/health')
         ) {
           return true
         }
@@ -44,11 +54,21 @@ export default withAuth(
         return !!token
       },
     },
+    pages: {
+      signIn: '/login',
+    },
   }
 )
 
 export const config = {
   matcher: [
-    '/((?!_next/static|_next/image|favicon.ico|logo.svg|.*\\.png$).*)',
+    /*
+     * Match all request paths except:
+     * - _next/static (static files)
+     * - _next/image (image optimization files)
+     * - favicon.ico (favicon file)
+     * - public folder files
+     */
+    '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
   ],
 }
