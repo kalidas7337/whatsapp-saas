@@ -46,9 +46,13 @@
     "tailwindcss-animate": "^1.0.7",
     "zod": "^3.22.4"
   },
+  "optionalDependencies": {
+    "ioredis": "^5.9.1"
+  },
   "devDependencies": {
     "@types/bcryptjs": "^2.4.6",
     "@types/canvas-confetti": "^1.6.4",
+    "@types/ioredis": "^5.0.0",
     "@types/node": "^20.10.0",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",

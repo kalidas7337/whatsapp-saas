@@ -37,9 +37,22 @@ async function checkRedis(): Promise<'connected' | 'disconnected' | 'error' | 'n
     return 'not_configured'
   }
 
-  // Redis check disabled in standalone SaaS mode
-  // Enable when ioredis is installed and Redis is configured
-  return 'not_configured'
+  try {
+    const Redis = (await import('ioredis')).default
+    const redis = new Redis(redisUrl, {
+      maxRetriesPerRequest: 1,
+      connectTimeout: 5000,
+      lazyConnect: true,
+    })
+
+    await redis.connect()
+    await redis.ping()
+    await redis.quit()
+    return 'connected'
+  } catch (error) {
+    console.error('Redis health check failed:', error)
+    return 'error'
+  }
 }
 
 async function checkRabbitMQ(): Promise<'connected' | 'disconnected' | 'error' | 'not_configured'> {
